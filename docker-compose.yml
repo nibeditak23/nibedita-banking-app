@@ -1,0 +1,18 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: banking_db
+    environment:
+      POSTGRES_USER: bankuser
+      POSTGRES_PASSWORD: bankpass123
+      POSTGRES_DB: banking_app
+      POSTGRES_INITDB_ARGS: "-c password_encryption=scram-sha-256 -A trust"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:
