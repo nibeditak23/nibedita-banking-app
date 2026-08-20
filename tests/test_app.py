@@ -28,7 +28,7 @@ def test_create_account(client):
     assert response.json['balance'] == 1000.0
 
 def test_deposit(client):
-    """Test Deposit operation"""
+    """Test deposit operation and transaction creation"""
     create_resp= client.post('/api/accounts',json={
         "account_type": "savings",
         "balance":500.0,
@@ -39,6 +39,9 @@ def test_deposit(client):
     print(response.json)
     assert response.status_code==200
     assert response.json['balance']==750.0
+    assert 'transaction_id' in response.json
+    assert 'duration_ms' in response.json
+    assert response.json['duration_ms'] > 0
     
 def test_withdraw_insufficient_funds(client):
     """Test withdrawal with insufficient funds"""
@@ -65,3 +68,23 @@ def test_get_account(client):
     assert response.status_code == 200
     assert response.json['owner_name'] == 'David'
     assert response.json['balance'] == 1500.0
+    
+def test_get_transactions(client):
+    create_resp= client.post('/api/accounts', json={
+        "account_type": 'checking',
+        "balance": 1000.0,
+        "owner_name": 'Eve'
+    })
+    account_id=create_resp.json['account_id']
+    
+    # Make two deposits
+    client.post(f'/api/accounts/{account_id}/deposit', json={'amount':100.0})
+    client.post(f'/api/accounts/{account_id}/deposit', json={'amount':200.0})
+    
+    response = client.get(f'/api/accounts/{account_id}/transactions')
+    assert response.status_code==200
+    assert len(response.json) == 2
+    assert response.json[0]['type'] == 'deposit'
+    assert response.json[0]['amount'] == 100.0
+    assert response.json[1]['amount'] == 200.0
+    

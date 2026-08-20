@@ -1,9 +1,10 @@
 from flask import Flask ,jsonify,request
 from flask_sqlalchemy import SQLAlchemy
-from src.models import Account, db
+from src.models import Account, db, Transaction
 from datetime import datetime
 import uuid
 import os
+import time
 
 app=Flask(__name__)
 #accounts = {}
@@ -65,6 +66,9 @@ def get_account(account_id):
 @app.route('/api/accounts/<account_id>/deposit',methods=['POST'])
 def deposit(account_id):
     """Deposit funds into an account"""
+    
+    # Note: duration_ms measures app logic only (excludes DB commit time)
+    start_time = time.time() * 1000 # Convert to milliseconds
     account = Account.query.filter_by(account_id=account_id).first()
     if not account:
         return jsonify({"error":"Account not found"}),404
@@ -72,11 +76,29 @@ def deposit(account_id):
     amount=float(data.get('amount',0))
     try:
         new_balance=account.deposit(amount)
+        #Calculate duration
+        end_time = time.time() * 1000
+        duration_ms = end_time - start_time
+        
+        #Create Transaction record
+        transaction = Transaction(
+            transaction_id = str(uuid.uuid4()),
+            account_id=account_id,
+            transaction_type = 'deposit',
+            amount= amount,
+            timestamp=datetime.now(),
+            status='completed',
+            duration_ms=duration_ms
+        )
+        db.session.add(transaction)
         db.session.commit()
+        
         return jsonify({
             "account_id":account_id,
             "balance":new_balance,
-            "status":"deposit successful"
+            "status":"deposit successful",
+            "transaction_id":transaction.transaction_id,
+            "duration_ms":transaction.duration_ms
         }),200
     except Exception as e:
         db.session.rollback()
@@ -84,22 +106,67 @@ def deposit(account_id):
 @app.route('/api/accounts/<account_id>/withdraw',methods=['POST'])
 def withdraw(account_id):
     """Withdraw funds from an account"""
+    
+    # Note: duration_ms measures app logic only (excludes DB commit time)
+    start_time = time.time() * 1000
+    
     account = Account.query.filter_by(account_id=account_id).first()
+    
     if not account:
         return jsonify({"error":"Account not found"}),404
+    
     data=request.get_json()
     amount=float(data.get('amount',0))
+    
     try:
         new_balance=account.withdraw(amount)
+        end_time = time.time() * 1000
+        duration_ms = end_time - start_time
+        
+        transaction = Transaction(
+            transaction_id=str(uuid.uuid4()),
+            account_id=account_id,
+            transaction_type='withdrawal',
+            amount=amount,
+            timestamp=datetime.now(),
+            status = 'completed',
+            duration_ms=duration_ms
+        )
+        
+        db.session.add(transaction)
         db.session.commit()
+        
         return jsonify({
             "account_id":account_id,
             "balance":new_balance,
-            "status":"Withdrawal successful"
+            "status":"Withdrawal successful",
+            "transaction_id":transaction.transaction_id,
+            "duration_ms":transaction.duration_ms
         }),200
+        
     except Exception as e:
         db.session.rollback()
         return jsonify({"error":str(e)}),400
+    
+@app.route('/api/accounts/<account_id>/transactions', methods=['GET'])
+def get_transactions(account_id):
+    """Retrieve transaction history for an account"""
+    account = Account.query.filter_by(account_id=account_id).all()
+    if not account:
+        return jsonify({'error':'Account not found'}), 404
+    
+    transactions = Transaction.query.filter_by(account_id=account_id).all()
+    
+    return jsonify([{
+        "transaction_id":t.transaction_id,
+        "account_id":t.account_id,
+        "type":t.transaction_type,
+        "amount":t.amount,
+        "timestamp":t.timestamp.isoformat(),
+        "status":t.status,
+        "duration_ms":t.duration_ms
+    } for t in transactions]), 200
+    
 if __name__ == '__main__':
     app.run(debug=True,host='0.0.0.0',port=5000)
     
