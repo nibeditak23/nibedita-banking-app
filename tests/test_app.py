@@ -88,3 +88,54 @@ def test_get_transactions(client):
     assert response.json[0]['amount'] == 100.0
     assert response.json[1]['amount'] == 200.0
     
+def test_get_all_accounts(client):
+    """Test retrieving all accounts"""
+    client.post('/api/accounts', json={
+        "account_type":'checking',
+        "owner_name": 'Alice',
+        "balance": 1000.0
+    })
+    client.post('/api/accounts', json={
+        "account_type": 'savings',
+        "owner_name": 'Bob',
+        "balance": 2000.0
+    })
+    response = client.get('/api/accounts')
+    assert response.status_code == 200
+    assert len(response.json) >= 2
+    
+def test_get_accounts_by_owner(client):
+    """Test filtering accounts by owner"""
+    create_resp= client.post('/api/accounts', json=({
+        'owner_name': 'Charlie',
+        'account_type': 'checking',
+        'balance': 1500.0
+    }))
+    account_id = create_resp.json['account_id']
+    response = client.get('/api/accounts?owner=Charlie')
+    assert response.status_code == 200
+    assert any(acc['account_id']==account_id for acc in response.json)
+    
+def test_account_summary(client):
+    """Test transaction summary endpoint"""
+    create_resp = client.post('/api/accounts', json={
+        'owner_name': 'Diana',
+        'account_type': 'checking',
+        'balance': 1000.0
+    })
+    
+    account_id = create_resp.json['account_id']
+    
+    # Make deposits and withdrawals
+    client.post(f'/api/accounts/{account_id}/deposit', json={'amount':500.0})
+    client.post(f'/api/accounts/{account_id}/withdraw', json={'amount':200.0})
+    
+    response = client.get(f'/api/accounts/{account_id}/summary')
+    print(response.json)
+    assert response.status_code ==200
+    assert response.json['total_deposits'] == 500.0
+    assert response.json['total_withdrawals'] == 200.0
+    assert response.json['transaction_count'] == 2
+    assert response.json['avg_duration_ms'] > 0
+    
+    

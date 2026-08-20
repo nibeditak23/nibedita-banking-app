@@ -167,6 +167,59 @@ def get_transactions(account_id):
         "duration_ms":t.duration_ms
     } for t in transactions]), 200
     
+@app.route('/api/accounts', methods=['GET'])
+def get_accounts():
+    """Retrive all accounts optionally by Owner"""
+    owner = request.args.get('owner')
+    
+    if owner:
+        accounts=Account.query.filter_by(owner_name = owner).all()
+    else:
+        accounts=Account.query.all()
+        
+    return jsonify([{
+        "account_id": acc.account_id,
+        "owner_name": acc.owner_name,
+        "account_type": acc.account_type,
+        "balance": acc.balance,
+        "created_at": acc.created_at.isoformat()
+    } for acc in accounts]), 200
+    
+@app.route('/api/accounts/<account_id>/summary', methods=['GET'])
+def account_summary(account_id):
+    """Get transaction summary for an account"""
+    account = Account.query.filter_by(account_id=account_id).first()
+    if not account:
+        return jsonify({"error":"Account not Found"}), 404
+    
+    transactions = Transaction.query.filter_by(account_id=account_id).all()
+    
+    if not transactions:
+        return jsonify({
+            "account_id":account_id,
+            "owner_name":account.owner_name,
+            "current_balance":account.balance,
+            "total_deposits": 0,
+            "total_withdrawals": 0,
+            "transaction_count": 0,
+            "avg_duration_ms": 0
+        }),200
+        
+    deposits = [t.amount for t in transactions if t.transaction_type == 'deposit']
+    withdrawals = [t.amount for t in transactions if t.transaction_type == 'withdrawal']
+    duration = [t.duration_ms for t in transactions]
+    
+    return jsonify ({
+        "account_id": account_id,
+        "owner_name": account.owner_name,
+        "current_balance": account.balance,
+        "total_deposits": sum(deposits),
+        "total_withdrawals": sum(withdrawals),
+        "transaction_count": len(duration),
+        "avg_duration_ms": sum(duration)/len(duration) if duration else 0
+    }), 200
+    
+    
 if __name__ == '__main__':
     app.run(debug=True,host='0.0.0.0',port=5000)
     
